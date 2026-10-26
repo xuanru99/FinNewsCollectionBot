@@ -1,16 +1,16 @@
 name: 📡 RSS 财经新闻自动推送
 
 on:
-  # 定时触发：每天上午9点和下午5点（北京时间）
+  # 定时触发：每天早上7:30和晚上19:30（北京时间）
   schedule:
-    - cron: '0 1 * * *'  # 北京时间 09:00 (UTC 01:00)
-    - cron: '0 9 * * *'  # 北京时间 17:00 (UTC 09:00)
-  
+    - cron: "30 23 * * *"   # 北京时间 07:30 (UTC 23:30 前一天)
+    - cron: "30 11 * * *"   # 北京时间 19:30 (UTC 11:30)
+
   # 手动触发
   workflow_dispatch:
     inputs:
       test_mode:
-        description: '测试模式（不发送微信推送）'
+        description: "测试模式（不发送微信推送）"
         required: false
         default: false
         type: boolean
@@ -22,55 +22,37 @@ jobs:
   collect-and-summarize:
     name: 收集与推送财经摘要
     runs-on: ubuntu-latest
-    env:
-      EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-      EMAIL_TO: ${{ vars.EMAIL_TO || secrets.EMAIL_TO }}
-    
+
     steps:
-    - name: 📥 检出代码（checkout）
+    - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # 需要完整历史以便后续 pull/rebase/push
-      
-    - name: 🐍 设置 Python 环境（setup-python）
+        fetch-depth: 0
+
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-        
-    - name: 📦 安装依赖（pip install）
+        python-version: "3.9"
+
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        
-    - name: 🔧 设置环境变量（导入 Secrets/Variables 到环境）
+
+    - name: Set environment variables
       run: |
         echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
         echo "SERVER_CHAN_KEYS=${{ secrets.SERVER_CHAN_KEYS }}" >> $GITHUB_ENV
-        echo "SMTP_SERVER=${{ secrets.SMTP_SERVER }}" >> $GITHUB_ENV
-        echo "SMTP_PORT=${{ secrets.SMTP_PORT }}" >> $GITHUB_ENV
-        echo "EMAIL_USERNAME=${{ secrets.EMAIL_USERNAME }}" >> $GITHUB_ENV
-        echo "EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}" >> $GITHUB_ENV
-        echo "EMAIL_FROM=${{ secrets.EMAIL_FROM }}" >> $GITHUB_ENV
-        echo "EMAIL_TO=${{ vars.EMAIL_TO || secrets.EMAIL_TO }}" >> $GITHUB_ENV
-        
-    - name: 🚀 运行财经新闻收集和摘要（python financebot.py）
+
+    - name: Run finance bot
       run: |
         python financebot.py
-    
-    - name: ✉️ 发送邮件报告（send_email_report.py）
-      if: ${{ env.EMAIL_USERNAME != '' && env.EMAIL_PASSWORD != '' && env.EMAIL_TO != '' }}
-      run: |
-        python scripts/send_email_report.py \
-          --subject "📌 $(date +"%Y-%m-%d") 财经新闻摘要" \
-          --html-file output/latest_report.html \
-          --text-file output/latest_report.txt
-        
-    - name: 🗓️ 生成日期标识（北京时间）
+
+    - name: Generate timestamp (Beijing Time)
       run: |
         echo "ARCHIVE_DATE=$(TZ=Asia/Shanghai date +'%Y%m%d_%H%M%S')" >> $GITHUB_ENV
-        
-    - name: 📦 上传归档报告（artifact）
+
+    - name: Upload report artifact
       if: always()
       uses: actions/upload-artifact@v4
       with:
@@ -79,31 +61,25 @@ jobs:
           output/*.md
         if-no-files-found: ignore
 
-    - name: 🔁 提交归档到仓库（pull --rebase 后 commit & push）
+    - name: Commit archive to repo
       if: always()
       run: |
         set -e
-        echo "Git status before commit:" && git status --porcelain
-        # 配置提交用户
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        # 确定当前分支
         BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-        echo "Current branch: ${BRANCH}"
-        # 拉取最新代码，避免非快进错误
         git fetch origin "${BRANCH}"
         git pull --rebase origin "${BRANCH}" || true
-        # 若无变化则跳过
         if [ -z "$(git status --porcelain output/*.md 2>/dev/null || true)" ]; then
-          echo "No markdown report changes to commit. Skipping."
+          echo "No changes to commit."
           exit 0
         fi
         git add output/*.md
-        git commit -m "chore(report): 存档报告 ${ARCHIVE_DATE} [skip ci]"
+        git commit -m "chore(report): archive ${ARCHIVE_DATE} [skip ci]"
         git push origin "HEAD:${BRANCH}"
-        
-    - name: 📊 显示运行结果（日志尾声）
+
+    - name: Show result
       if: always()
       run: |
         echo "✅ 财经新闻收集任务完成"
-        echo "📅 运行时间: $(date)"
+        echo "📅 $(date)"
