@@ -85,6 +85,24 @@ RSS_SOURCES = {
         "category": "oil",
         "description": "原油新闻"
     },
+    "Investing.com Silver": {
+        "url": "https://www.investing.com/rss/news_8834.rss",
+        "priority": 9,
+        "category": "silver",
+        "description": "白银新闻"
+    },
+    "Investing.com Copper": {
+        "url": "https://www.investing.com/rss/news_8835.rss",
+        "priority": 9,
+        "category": "base_metal",
+        "description": "铜/基本金属新闻"
+    },
+    "Investing.com Natural Gas": {
+        "url": "https://www.investing.com/rss/news_8850.rss",
+        "priority": 8,
+        "category": "energy",
+        "description": "天然气新闻"
+    },
 
     # === 综合财经源 (高质量) ===
     "Reuters Business": {
@@ -99,6 +117,12 @@ RSS_SOURCES = {
         "category": "markets",
         "description": "路透社市场新闻"
     },
+    "Reuters World": {
+        "url": "http://feeds.reuters.com/reuters/worldNews",
+        "priority": 6,
+        "category": "world",
+        "description": "路透社国际新闻"
+    },
     "CNBC Markets": {
         "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
         "priority": 7,
@@ -110,6 +134,12 @@ RSS_SOURCES = {
         "priority": 6,
         "category": "world",
         "description": "CNBC 全球新闻"
+    },
+    "CNBC Energy": {
+        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003113",
+        "priority": 8,
+        "category": "energy",
+        "description": "CNBC 能源新闻"
     },
 
     # === 另类观点/宏观 ===
@@ -126,6 +156,40 @@ RSS_SOURCES = {
         "priority": 6,
         "category": "markets",
         "description": "雅虎财经市场新闻"
+    },
+    "Yahoo Finance Commodities": {
+        "url": "https://finance.yahoo.com/news/commodities/",
+        "priority": 7,
+        "category": "commodity",
+        "description": "雅虎财经商品新闻"
+    },
+
+    # === MarketWatch (免费) ===
+    "MarketWatch Commodities": {
+        "url": "https://www.marketwatch.com/rss/story/rss?scid=mkw-commodities",
+        "priority": 7,
+        "category": "commodity",
+        "description": "市场观察商品新闻"
+    },
+    "MarketWatch Markets": {
+        "url": "https://www.marketwatch.com/rss/story/rss?scid=mkw-markets",
+        "priority": 6,
+        "category": "markets",
+        "description": "市场观察市场新闻"
+    },
+
+    # === FX Empire (商品专精，免费) ===
+    "FX Empire Gold": {
+        "url": "https://www.fxempire.com/feeds/gold",
+        "priority": 8,
+        "category": "gold",
+        "description": "黄金分析"
+    },
+    "FX Empire Commodities": {
+        "url": "https://www.fxempire.com/feeds/commodities",
+        "priority": 8,
+        "category": "commodity",
+        "description": "商品分析"
     },
 }
 
@@ -338,12 +402,19 @@ def ai_filter_and_translate(article: dict, max_retries: int = 2) -> Optional[dic
 请对以下英文新闻文章进行两步处理:
 
 ## 第一步: 相关性判断
-判断这篇文章是否与以下领域**高度相关**:
+判断这篇文章是否与以下领域**相关**（不需要高度相关，只要有一定关联即可）:
 - 商品期货(金银铜、原油、天然气、农产品、化工品等)
-- 国际地缘政治(影响市场的重大事件)
-- 重大金融市场动态(央行政策、通胀数据、经济衰退风险等)
+- 国际地缘政治(可能影响市场的重大事件)
+- 重大金融市场动态(央行政策、通胀数据、经济衰退风险、汇率波动等)
+- 全球宏观经济(贸易数据、就业数据、PMI等)
 
-如果文章只是普通的科技/娱乐/体育/本地新闻，或者与上述领域关联度很低，请直接回复: SKIP
+只有当文章明显是以下内容时才回复 SKIP:
+- 纯科技产品发布/评测
+- 娱乐/体育/明星八卦
+- 纯本地/社区新闻
+- 与经济金融完全无关的内容
+
+**注意：请尽量宽松判断，宁可多推送也不要漏掉重要信息。**
 
 ## 第二步: 如果相关，请完成以下任务
 1. **相关性评分**: 给出 1-10 分 (10分表示高度相关且重要)
@@ -447,7 +518,7 @@ def fetch_rss_feeds() -> list:
                 continue
 
             count = 0
-            for entry in feed.entries[:15]:  # 每个源最多取15篇
+            for entry in feed.entries[:20]:  # 每个源最多取20篇（原来15篇）
                 link = entry.get('link', '')
 
                 # 去重
@@ -506,8 +577,8 @@ def process_articles(articles: list, test_mode: bool = False) -> list:
     for article in articles:
         score_info = keyword_score(article['title'], article.get('summary', ''))
 
-        # 设置阈值: 分数 >= 3 才进入下一步 (至少命中一个商品/地缘关键词)
-        if score_info['score'] >= 3:
+        # 设置阈值: 分数 >= 1.5 就进入下一步 (降低门槛，让更多文章进入AI筛选)
+        if score_info['score'] >= 1.5:
             article['keyword_score'] = score_info
             scored_articles.append(article)
             logger.debug(f"✓ 通过初筛 [{score_info['score']:.0f}分]: {article['title'][:50]}")
@@ -519,8 +590,8 @@ def process_articles(articles: list, test_mode: bool = False) -> list:
     # 按 keyword_score 排序，优先处理高分文章
     scored_articles.sort(key=lambda x: x['keyword_score']['score'], reverse=True)
 
-    # 限制处理数量 (API 成本控制)
-    max_process = min(len(scored_articles), 20) if not test_mode else min(len(scored_articles), 5)
+    # 限制处理数量 (API 成本控制) - 提高到35篇
+    max_process = min(len(scored_articles), 35) if not test_mode else min(len(scored_articles), 8)
     to_process = scored_articles[:max_process]
 
     # 第二步: 爬取全文 + AI 处理
@@ -582,7 +653,7 @@ def format_push_content(articles: list, test_mode: bool = False) -> str:
         "",
     ]
 
-    for i, article in enumerate(articles[:15]):  # 最多推送15条
+    for i, article in enumerate(articles[:20]):  # 最多推送20条（原来15条）
         ai = article.get('ai_result', {})
         score = ai.get('ai_score', '?')
         tags = ai.get('ai_tags', '')
