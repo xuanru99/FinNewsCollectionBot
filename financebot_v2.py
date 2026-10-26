@@ -120,12 +120,12 @@ RSS_SOURCES = {
         "description": "另类宏观分析"
     },
 
-    # === Bloomberg (部分免费) ===
-    "Bloomberg Markets": {
-        "url": "https://feeds.bloomberg.com/markets/news.rss",
+    # === Yahoo Finance (免费) ===
+    "Yahoo Finance Markets": {
+        "url": "https://finance.yahoo.com/news/rssindex",
         "priority": 6,
         "category": "markets",
-        "description": "彭博市场新闻"
+        "description": "雅虎财经市场新闻"
     },
 }
 
