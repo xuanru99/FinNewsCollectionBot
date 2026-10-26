@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-FinNewsCollectionBot v2.0 - 期货财经新闻智能聚合系统
+FinNewsCollectionBot v2.1 - 期货财经新闻智能聚合系统
 ========================================================
 核心改进:
 1. ✅ 只用免费可访问的数据源 (解决链接打不开问题)
 2. ✅ 全文爬取 + 完整翻译 (解决断章取义问题)
 3. ✅ 智能筛选: 商品期货 + 地缘政治 + 重大金融
 4. ✅ 期货侧重: 金银铜/原油/化工/粮食 优先展示
-5. ✅ DeepSeek AI 全文翻译 + 相关性判断
+5. ✅ 智谱 GLM-4 AI 全文翻译 + 相关性判断 (免费)
 6. ✅ Server酱 推送完整中文内容
 """
 
@@ -34,10 +34,10 @@ from bs4 import BeautifulSoup
 # 时区设置
 BEIJING_TZ = timezone(timedelta(hours=8))
 
-# DeepSeek API 配置
+# 智谱 AI API 配置 (OpenAI 兼容接口，免费额度)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "deepseek-chat")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "glm-4-flash")  # 免费模型
 
 # Server酱配置
 SERVER_CHAN_KEYS = os.environ.get("SERVER_CHAN_KEYS", "").split(",")
@@ -120,12 +120,12 @@ RSS_SOURCES = {
         "description": "另类宏观分析"
     },
 
-    # === 金融时报(部分免费) ===
-    "FT Markets": {
-        "url": "https://www.ft.com/markets?format=rss",
-        "priority": 5,
+    # === Bloomberg (部分免费) ===
+    "Bloomberg Markets": {
+        "url": "https://feeds.bloomberg.com/markets/news.rss",
+        "priority": 6,
         "category": "markets",
-        "description": "金融时报市场版"
+        "description": "彭博市场新闻"
     },
 }
 
@@ -315,7 +315,7 @@ def keyword_score(title: str, content: str = "") -> dict:
 
 def ai_filter_and_translate(article: dict, max_retries: int = 2) -> Optional[dict]:
     """
-    使用 DeepSeek AI 进行:
+    使用智谱 GLM-4 AI 进行:
     1. 判断文章是否与期货/地缘/金融相关
     2. 如果相关，翻译成完整中文
     """
