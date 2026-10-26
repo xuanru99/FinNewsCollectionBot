@@ -1,0 +1,43 @@
+name: 📡 期货财经新闻智能推送 v2.0
+
+on:
+  schedule:
+    # 北京时间 07:30 (UTC 23:30)
+    - cron: "30 23 * * *"
+    # 北京时间 19:30 (UTC 11:30)
+    - cron: "30 11 * * *"
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: "测试模式（不发送微信推送）"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install feedparser requests beautifulsoup4
+
+      - name: Run finance bot v2.0
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || 'https://api.deepseek.com/v1' }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL || 'deepseek-chat' }}
+          SERVER_CHAN_KEYS: ${{ secrets.SERVER_CHAN_KEYS }}
+          TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
+        run: |
+          python financebot_v2.py
