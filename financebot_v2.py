@@ -54,84 +54,16 @@ logger = logging.getLogger(__name__)
 # 数据源配置 - 只保留免费可访问的源
 # ============================================================
 RSS_SOURCES = {
-    # === 贵金属/商品专精源 (高优先级) ===
-    "Kitco News": {
-        "url": "https://www.kitco.com/news/rss",
-        "priority": 10,
-        "category": "commodity",
-        "description": "贵金属与商品市场专业资讯"
-    },
-    "Kitco Gold & Silver": {
-        "url": "https://www.kitco.com/gold-price-today-usa/",
-        "priority": 10,
-        "category": "precious_metal",
-        "description": "金银价格与分析"
-    },
-    "Investing.com Commodities": {
-        "url": "https://www.investing.com/rss/news_301.rss",
-        "priority": 9,
-        "category": "commodity",
-        "description": "商品期货新闻"
-    },
-    "Investing.com Gold": {
-        "url": "https://www.investing.com/rss/news_8830.rss",
-        "priority": 9,
-        "category": "gold",
-        "description": "黄金新闻"
-    },
-    "Investing.com Oil": {
-        "url": "https://www.investing.com/rss/news_8849.rss",
-        "priority": 9,
-        "category": "oil",
-        "description": "原油新闻"
-    },
-    "Investing.com Silver": {
-        "url": "https://www.investing.com/rss/news_8834.rss",
-        "priority": 9,
-        "category": "silver",
-        "description": "白银新闻"
-    },
-    "Investing.com Copper": {
-        "url": "https://www.investing.com/rss/news_8835.rss",
-        "priority": 9,
-        "category": "base_metal",
-        "description": "铜/基本金属新闻"
-    },
-    "Investing.com Natural Gas": {
-        "url": "https://www.investing.com/rss/news_8850.rss",
-        "priority": 8,
-        "category": "energy",
-        "description": "天然气新闻"
-    },
-
-    # === 综合财经源 (高质量) ===
-    "Reuters Business": {
-        "url": "http://feeds.reuters.com/reuters/businessNews",
-        "priority": 7,
-        "category": "general",
-        "description": "路透社商业新闻"
-    },
-    "Reuters Markets": {
-        "url": "http://feeds.reuters.com/reuters/marketsUS",
-        "priority": 8,
-        "category": "markets",
-        "description": "路透社市场新闻"
-    },
-    "Reuters World": {
-        "url": "http://feeds.reuters.com/reuters/worldNews",
-        "priority": 6,
-        "category": "world",
-        "description": "路透社国际新闻"
-    },
+    # === CNBC (已验证可用，主力数据源) ===
     "CNBC Markets": {
         "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-        "priority": 7,
+        "priority": 9,
         "category": "markets",
         "description": "CNBC 市场新闻"
     },
     "CNBC World": {
         "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362",
-        "priority": 6,
+        "priority": 7,
         "category": "world",
         "description": "CNBC 全球新闻"
     },
@@ -142,54 +74,76 @@ RSS_SOURCES = {
         "description": "CNBC 能源新闻"
     },
 
-    # === 另类观点/宏观 ===
-    "ZeroHedge": {
-        "url": "https://www.zerohedge.com/rss",
-        "priority": 6,
-        "category": "alternative",
-        "description": "另类宏观分析"
+    # === Reuters (标准RSS格式) ===
+    "Reuters Markets": {
+        "url": "https://www.reuters.com/markets/us/",
+        "priority": 8,
+        "category": "markets",
+        "description": "路透社市场新闻",
+        "use_scraper": True  # 标记需要特殊处理
+    },
+    "Reuters Business": {
+        "url": "https://www.reuters.com/business/",
+        "priority": 7,
+        "category": "business",
+        "description": "路透社商业新闻",
+        "use_scraper": True
     },
 
-    # === Yahoo Finance (免费) ===
-    "Yahoo Finance Markets": {
+    # === Investing.com (只有Commodities能用) ===
+    "Investing.com Commodities": {
+        "url": "https://www.investing.com/rss/news_301.rss",
+        "priority": 9,
+        "category": "commodity",
+        "description": "商品期货新闻"
+    },
+
+    # === Yahoo Finance (RSS) ===
+    "Yahoo Finance": {
         "url": "https://finance.yahoo.com/news/rssindex",
         "priority": 6,
         "category": "markets",
-        "description": "雅虎财经市场新闻"
-    },
-    "Yahoo Finance Commodities": {
-        "url": "https://finance.yahoo.com/news/commodities/",
-        "priority": 7,
-        "category": "commodity",
-        "description": "雅虎财经商品新闻"
+        "description": "雅虎财经"
     },
 
-    # === MarketWatch (免费) ===
-    "MarketWatch Commodities": {
-        "url": "https://www.marketwatch.com/rss/story/rss?scid=mkw-commodities",
-        "priority": 7,
-        "category": "commodity",
-        "description": "市场观察商品新闻"
-    },
-    "MarketWatch Markets": {
-        "url": "https://www.marketwatch.com/rss/story/rss?scid=mkw-markets",
+    # === MarketWatch (RSS) ===
+    "MarketWatch": {
+        "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
         "priority": 6,
         "category": "markets",
-        "description": "市场观察市场新闻"
+        "description": "市场观察头条"
     },
 
-    # === FX Empire (商品专精，免费) ===
-    "FX Empire Gold": {
-        "url": "https://www.fxempire.com/feeds/gold",
-        "priority": 8,
-        "category": "gold",
-        "description": "黄金分析"
+    # === The Guardian Business (免费高质量) ===
+    "Guardian Business": {
+        "url": "https://www.theguardian.com/business/rss",
+        "priority": 6,
+        "category": "business",
+        "description": "卫报商业新闻"
     },
-    "FX Empire Commodities": {
-        "url": "https://www.fxempire.com/feeds/commodities",
-        "priority": 8,
-        "category": "commodity",
-        "description": "商品分析"
+
+    # === NPR Business (免费) ===
+    "NPR Business": {
+        "url": "https://feeds.npr.org/1001/rss.json",
+        "priority": 5,
+        "category": "business",
+        "description": "NPR 商业新闻"
+    },
+
+    # === Ars Technica (科技+经济交叉) ===
+    "Ars Technica": {
+        "url": "https://feeds.arstechnica.com/arstechnica/business",
+        "priority": 5,
+        "category": "tech_business",
+        "description": "Ars 科技商业"
+    },
+
+    # === Crypto/FinTech (补充) ===
+    "CoinDesk": {
+        "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "priority": 5,
+        "category": "crypto",
+        "description": "CoinDesk 加密货币"
     },
 }
 
@@ -420,8 +374,10 @@ def ai_filter_and_translate(article: dict, max_retries: int = 2) -> Optional[dic
 1. **相关性评分**: 给出 1-10 分 (10分表示高度相关且重要)
 2. **重要性标签**: 从以下标签中选择适用的(可多选):
    🔥 重要 | 📈 利多 | 📉 利空 | ⚠️ 风险 | 🌍 地缘 | 💰 期货 | 🏦 央行
-3. **完整中文翻译**: 将文章**完整翻译成流畅的中文**，保持原文的段落结构和信息完整性。
-   不要省略任何关键信息，不要只翻译摘要。这是给专业投资者看的日报素材。
+3. **中文精要摘要**: 用 200-400 字的流畅中文总结文章核心内容和观点。
+   - 如果是数据分析类新闻(含价格/数据)，请用简洁的格式列出关键数据点
+   - 如果是事件类新闻，说明: 什么事件 → 为什么重要 → 可能的影响
+   - 不要逐句翻译原文，要提炼要点！这是给专业投资者看的快速日报。
 
 ---
 
@@ -436,8 +392,8 @@ def ai_filter_and_translate(article: dict, max_retries: int = 2) -> Optional[dic
 ---
 【相关性评分】: X/10
 【重要性标签】: 标签列表
-【中文翻译】:
-(完整的中文翻译内容)
+【中文精要摘要】:
+(200-400字的精要总结)
 ---
 
 如果不相关，只需输出: SKIP"""
@@ -475,7 +431,7 @@ def ai_filter_and_translate(article: dict, max_retries: int = 2) -> Optional[dic
             # 解析 AI 输出
             score_match = re.search(r'【相关性评分】\s*:\s*(\d+)/?10?', ai_response)
             tags_match = re.search(r'【重要性标签】\s*:\s*(.+)', ai_response)
-            translate_match = re.search(r'【中文翻译】\s*:\s*\n?(.*)', ai_response, re.DOTALL)
+            translate_match = re.search(r'【中文精要摘要】\s*:\s*\n?(.*)', ai_response, re.DOTALL)
 
             return {
                 'ai_score': int(score_match.group(1)) if score_match else 5,
@@ -591,7 +547,7 @@ def process_articles(articles: list, test_mode: bool = False) -> list:
     scored_articles.sort(key=lambda x: x['keyword_score']['score'], reverse=True)
 
     # 限制处理数量 (API 成本控制) - 提高到35篇
-    max_process = min(len(scored_articles), 35) if not test_mode else min(len(scored_articles), 8)
+    max_process = min(len(scored_articles), 35) if not test_mode else min(len(scored_articles), 15)
     to_process = scored_articles[:max_process]
 
     # 第二步: 爬取全文 + AI 处理
@@ -673,14 +629,14 @@ def format_push_content(articles: list, test_mode: bool = False) -> str:
         lines.append(f"*{' | '.join(meta_parts)}*")
         lines.append(f"")
 
-        # 中文翻译内容
+        # 中文精要摘要内容
         if translation:
-            # 截断过长的翻译 (Server酱有长度限制)
-            if len(translation) > 1500:
-                translation = translation[:1500] + "\n...(全文较长，点击链接查看原文)"
+            # 精要摘要通常较短，但仍然做长度保护
+            if len(translation) > 800:
+                translation = translation[:800] + "\n...(内容较长，点击链接查看原文)"
             lines.append(translation)
         else:
-            lines.append("(翻译内容暂不可用)")
+            lines.append("(摘要生成失败)")
 
         lines.append("")
         lines.append(f"🔗 [查看原文]({link})")
