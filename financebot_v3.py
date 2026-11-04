@@ -72,7 +72,7 @@ RSS_SOURCES = {
         "priority": 10, "category": "能源"
     },
     "CNBC Energy": {
-        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003113",
+        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Energy",
         "priority": 9, "category": "能源"
     },
 
@@ -84,6 +84,14 @@ RSS_SOURCES = {
     "Nasdaq Commodities": {
         "url": "https://www.nasdaq.com/feed/rssoutbound?category=Commodities",
         "priority": 9, "category": "商品综合"
+    },
+    "Nasdaq Politics": {
+        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Politics",
+        "priority": 6, "category": "地缘"
+    },
+    "FXStreet": {
+        "url": "https://www.fxstreet.com/rss/news",
+        "priority": 6, "category": "宏观"
     },
 
     # ===== 农产品 / 谷物 / 油脂 =====
@@ -269,24 +277,69 @@ def title_tokens(title: str) -> set:
     return set(w for w in normalize_title(title).split() if w not in STOPWORDS and len(w) > 2)
 
 
-def is_similar(t1: str, t2: str, threshold: float = 0.65) -> bool:
-    """标题相似度判断 (Jaccard)"""
+def is_similar(t1: str, t2: str, threshold: float = 0.55) -> bool:
+    """标题相似度判断 (Jaccard + 交集词兜底)"""
     a, b = title_tokens(t1), title_tokens(t2)
     if not a or not b:
         return False
     inter = len(a & b)
     union = len(a | b)
-    return (inter / union) >= threshold
+    j = inter / union
+    if j >= threshold:
+        return True
+    # 兜底：共享 3 个以上实义词且有一定重叠
+    if inter >= 3 and j >= 0.25:
+        return True
+    return False
+
+
+def event_similar(e1: str, e2: str) -> bool:
+    """
+    同一事件判断。优先解析结构化标签 "品种+方向|驱动因素"
+    例: "金价上涨|美国中期选举民主党胜选"
+    """
+    if not e1 or not e2:
+        return False
+
+    from difflib import SequenceMatcher
+
+    def split_ev(e):
+        for sep in ('|', '｜', ':', '：'):
+            if sep in e:
+                a, b = e.split(sep, 1)
+                return a.strip(), b.strip()
+        return e.strip(), ''
+
+    a1, d1 = split_ev(e1)
+    a2, d2 = split_ev(e2)
+
+    # 结构化比较：主判定相同 + 驱动因素相近
+    if d1 and d2:
+        subj = SequenceMatcher(None, a1, a2).ratio()
+        drive = SequenceMatcher(None, d1, d2).ratio()
+        if subj >= 0.55 and drive >= 0.35:
+            return True
+        # 品种+方向几乎一致，驱动有交集
+        if subj >= 0.80 and drive >= 0.25:
+            return True
+        # 驱动因素几乎一致也判定重复
+        if drive >= 0.70:
+            return True
+        return False
+
+    # 非结构化兜底
+    return SequenceMatcher(None, e1, e2).ratio() >= 0.35
 
 
 def load_state() -> dict:
-    default = {"morning_date": "", "evening_date": "", "hashes": {}}
+    default = {"morning_date": "", "evening_date": "", "hashes": {}, "events": []}
     try:
         with open(STATE_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
             data.setdefault("morning_date", "")
             data.setdefault("evening_date", "")
             data.setdefault("hashes", {})
+            data.setdefault("events", [])
             return data
     except Exception:
         return default
@@ -339,7 +392,7 @@ def save_state(state: dict):
 
 
 def prune_hashes(state: dict) -> dict:
-    """清理超过 DEDUP_DAYS 的 hash 记录"""
+    """清理超过 DEDUP_DAYS 的 hash / event 记录"""
     cutoff = datetime.now(BEIJING_TZ) - timedelta(days=DEDUP_DAYS)
     kept = {}
     for h, ts in state.get('hashes', {}).items():
@@ -350,6 +403,17 @@ def prune_hashes(state: dict) -> dict:
         except Exception:
             continue
     state['hashes'] = kept
+
+    kept_events = []
+    for ev in state.get('events', []):
+        try:
+            dt = datetime.fromisoformat(ev.get('ts', ''))
+            if dt >= cutoff:
+                kept_events.append(ev)
+        except Exception:
+            continue
+    # 最多保留 300 条
+    state['events'] = kept_events[-300:]
     return state
 
 
@@ -565,6 +629,7 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
 
 严格按以下格式输出：
 【评分】X
+【事件】格式必须是"品种+方向|驱动因素"，例如：金价上涨|美国中期选举民主党胜选 / 油价反弹|中东供应担忧 / 铜价新高|LME库存降至低位。同一事件在不同报道中必须用几乎相同的表述。
 【标签】标签1,标签2
 【摘要】
 核心事实：...
@@ -602,11 +667,13 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
                     return None
 
             score_m = re.search(r'【评分】\s*[:：]?\s*(\d+)', text)
+            event_m = re.search(r'【事件】\s*[:：]?\s*(.+)', text)
             tag_m = re.search(r'【标签】\s*[:：]?\s*(.+)', text)
             sum_m = re.search(r'【摘要】\s*[:：]?\s*\n?(.*)', text, re.DOTALL)
 
             return {
                 'score': int(score_m.group(1)) if score_m else 5,
+                'event': event_m.group(1).strip() if event_m else '',
                 'tags': tag_m.group(1).strip() if tag_m else '',
                 'summary': sum_m.group(1).strip() if sum_m else text,
             }
@@ -624,6 +691,7 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
 def process(articles: list, state: dict) -> list:
     now_bj = datetime.now(BEIJING_TZ)
     recent_hashes = state.get('hashes', {})
+    recent_events = [e.get('key', '') for e in state.get('events', [])]
     recent_titles = []
 
     # ---- 1. 关键词初筛 + 跨批次去重 ----
@@ -632,7 +700,7 @@ def process(articles: list, state: dict) -> list:
         title = art['title']
         h = title_hash(title)
 
-        # 跨批次去重
+        # 跨批次去重（同标题）
         if h in recent_hashes:
             logger.debug(f"  已推送过，跳过: {title[:50]}")
             continue
@@ -643,7 +711,7 @@ def process(articles: list, state: dict) -> list:
 
         # 批内标题相似去重
         if any(is_similar(title, t) for t in recent_titles):
-            logger.debug(f"  批内重复，跳过: {title[:50]}")
+            logger.info(f"  批内重复跳过: {title[:55]}")
             continue
         recent_titles.append(title)
 
@@ -661,65 +729,92 @@ def process(articles: list, state: dict) -> list:
     # ---- 2. 并发抓全文 + AI ----
     def handle(art):
         full = get_article_full_text(art['link'])
-        if full:
-            art['full_text'] = full
-        else:
-            art['full_text'] = art.get('summary', '')
-        res = ai_process(art)
-        if res:
-            art['ai'] = res
-            return art
-        return None
+        art['full_text'] = full if full else art.get('summary', '')
+        return ai_process(art)
 
     results = []
     with ThreadPoolExecutor(max_workers=AI_CONCURRENCY) as ex:
         futs = {ex.submit(handle, a): a for a in to_process}
         for i, f in enumerate(as_completed(futs), 1):
+            art = futs[f]
             try:
                 r = f.result()
                 if r:
-                    results.append(r)
-                    logger.info(f"  [{i}/{len(to_process)}] ✓ {r['title'][:45]} ({r['ai']['score']}/10)")
+                    art['ai'] = r
+                    results.append(art)
+                    logger.info(f"  [{i}/{len(to_process)}] ✓ {art['title'][:42]} ({r['score']}/10)")
             except Exception as e:
                 logger.warning(f"  处理异常: {e}")
 
-    # ---- 3. 排序 + 品种配额 ----
+    # ---- 3. 事件级去重 + 排序 ----
     results.sort(key=lambda x: (x['ai']['score'], x['kw']['score']), reverse=True)
 
-    # 品种配额：保证各品种都有覆盖，不能只有时政
+    deduped = []
+    kept_events = []          # 本批次内的事件
+    dropped = 0
+    for art in results:
+        ev = art['ai'].get('event', '')
+        # 与本批次已选事件比较
+        if ev and any(event_similar(ev, e) for e in kept_events):
+            dropped += 1
+            logger.info(f"  同事件跳过: {art['title'][:45]} ← {ev}")
+            continue
+        # 与历史事件比较（跨批次）
+        if ev and any(event_similar(ev, e) for e in recent_events):
+            dropped += 1
+            logger.info(f"  历史同事件跳过: {art['title'][:45]} ← {ev}")
+            continue
+        if ev:
+            kept_events.append(ev)
+        deduped.append(art)
+
+    logger.info(f"事件去重: -{dropped} 条，剩 {len(deduped)} 篇")
+
+    # ---- 4. 品种配额选取 ----
     COMMODITY_CATS = ['能源', '贵金属', '有色金属', '黑色金属', '谷物',
                       '油脂油料', '软商品', '农副产品', '化工', '航运']
+    PER_CAT_MIN = 2      # 每品种至少争取的条数
+    PER_CAT_CAP = 3      # 单品种最多条数
 
     picked = []
-    picked_hashes = set()
+    picked_set = set()
+    cat_count = {}
 
-    # 第一轮：每个商品品种最多先取 2 条
+    # 第一轮：每个商品品种取 2 条（优先高分）
     for cat in COMMODITY_CATS:
-        cnt = 0
-        for art in results:
-            if art['hash'] in picked_hashes:
+        for art in deduped:
+            if len(picked) >= MAX_ARTICLES:
+                break
+            if art['hash'] in picked_set:
                 continue
-            if cat in art['kw']['categories'] and cnt < 2:
+            if cat in art['kw']['categories'] and cat_count.get(cat, 0) < PER_CAT_MIN:
                 picked.append(art)
-                picked_hashes.add(art['hash'])
-                cnt += 1
-        if cnt:
-            logger.info(f"  品种[{cat}] 入选 {cnt} 条")
+                picked_set.add(art['hash'])
+                for c in art['kw']['categories']:
+                    cat_count[c] = cat_count.get(c, 0) + 1
 
-    # 第二轮：按分数补齐
-    for art in results:
+    # 第二轮：按分数补齐（单品种不超过 PER_CAT_CAP）
+    for art in deduped:
         if len(picked) >= MAX_ARTICLES:
             break
-        if art['hash'] not in picked_hashes:
-            picked.append(art)
-            picked_hashes.add(art['hash'])
+        if art['hash'] in picked_set:
+            continue
+        prim = art['kw']['categories'][0] if art['kw']['categories'] else '其他'
+        if cat_count.get(prim, 0) >= PER_CAT_CAP:
+            continue
+        picked.append(art)
+        picked_set.add(art['hash'])
+        cat_count[prim] = cat_count.get(prim, 0) + 1
 
     picked.sort(key=lambda x: x['ai']['score'], reverse=True)
     logger.info(f"最终入选: {len(picked)} 篇")
 
-    # ---- 4. 更新状态 ----
+    # ---- 5. 更新状态 ----
     for art in picked:
         state['hashes'][art['hash']] = now_bj.isoformat()
+        ev = art['ai'].get('event', '')
+        if ev:
+            state['events'].append({'key': ev, 'ts': now_bj.isoformat()})
     state = prune_hashes(state)
 
     return picked
