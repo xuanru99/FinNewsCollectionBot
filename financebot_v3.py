@@ -37,8 +37,11 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "glm-4-flash")
 
-# Server酱
-SERVER_CHAN_KEYS = os.environ.get("SERVER_CHAN_KEYS", "").split(",")
+# Server酱 —— 支持多个接收人，用逗号/分号/换行/空格任意分隔
+SERVER_CHAN_KEYS = [
+    k.strip() for k in re.split(r'[,;\s]+', os.environ.get("SERVER_CHAN_KEYS", ""))
+    if k.strip()
+]
 
 # GitHub (用于提交状态文件)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
