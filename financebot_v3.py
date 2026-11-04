@@ -629,7 +629,11 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
 
 严格按以下格式输出：
 【评分】X
-【事件】格式必须是"品种+方向|驱动因素"，例如：金价上涨|美国中期选举民主党胜选 / 油价反弹|中东供应担忧 / 铜价新高|LME库存降至低位。同一事件在不同报道中必须用几乎相同的表述。
+【事件】只输出**一个**核心事件，格式严格为"品种+方向|驱动因素"，禁止用 / 或 ; 分隔多个事件。例：
+  金价上涨|美国中期选举民主党胜选
+  油价反弹|中东供应中断担忧
+  铜价创新高|LME库存降至低位
+  同一事件在不同媒体的报道中必须使用近乎相同的表述。
 【标签】标签1,标签2
 【摘要】
 核心事实：...
@@ -671,9 +675,16 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
             tag_m = re.search(r'【标签】\s*[:：]?\s*(.+)', text)
             sum_m = re.search(r'【摘要】\s*[:：]?\s*\n?(.*)', text, re.DOTALL)
 
+            event_raw = event_m.group(1).strip() if event_m else ''
+            # 兜底：AI 若返回多个事件，只保留第一个
+            for sep in (' / ', '；', ';', '/'):
+                if sep in event_raw:
+                    event_raw = event_raw.split(sep)[0].strip()
+                    break
+
             return {
                 'score': int(score_m.group(1)) if score_m else 5,
-                'event': event_m.group(1).strip() if event_m else '',
+                'event': event_raw,
                 'tags': tag_m.group(1).strip() if tag_m else '',
                 'summary': sum_m.group(1).strip() if sum_m else text,
             }
