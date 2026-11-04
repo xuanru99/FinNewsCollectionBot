@@ -1,0 +1,59 @@
+name: 📡 期货财经新闻智能推送 v3.0
+
+on:
+  schedule:
+    # 精准触发（首选）
+    - cron: "30 23 * * *"   # 北京 07:30
+    - cron: "30 11 * * *"   # 北京 19:30
+    # 高频轮询（保险：GitHub 定时延迟时补位，代码内时间守卫控制）
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: "测试模式（只打印，不发微信）"
+        required: false
+        default: false
+        type: boolean
+      force_run:
+        description: "强制运行（忽略时间窗口）"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: finnews-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install feedparser requests beautifulsoup4
+
+      - name: Run finance bot v3.0
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          SERVER_CHAN_KEYS: ${{ secrets.SERVER_CHAN_KEYS }}
+          TEST_MODE: ${{ github.event.inputs.test_mode || 'false' }}
+          FORCE_RUN: ${{ github.event.inputs.force_run || 'false' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python financebot_v3.py
