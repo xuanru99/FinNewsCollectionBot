@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-FinNewsCollectionBot v3.0 - 期货财经新闻智能聚合系统
+FinNewsCollectionBot v3.1 - 期货财经新闻智能聚合系统
 ========================================================
-核心改进 (v3.0):
-1. ✅ 时间守卫 + 高频轮询: 北京时间 07:30 / 19:30 精准推送
-2. ✅ 双层去重: 批内去重 + 跨批次去重 (3天内不重复)
-3. ✅ 全品种覆盖: 能源/贵金属/有色/黑色/谷物/油脂/软商品/航运/化工/农副
-4. ✅ 专业数据源: Mining.com / OilPrice / WorldGrain / HellenicShipping 等
-5. ✅ 智谱 GLM-4 精要摘要 (200-300字，数据类提炼要点)
-6. ✅ Server酱 微信推送 + 品种分布统计
+核心改进 (v3.1):
+1. ✅ 新增"国内外金融要闻速览"板块: 每次推送提炼国内3-5条 + 海外4-6条当日重要金融新闻
+2. ✅ 每条新闻标注精确发布时间 (北京时间, 精确到分钟)
+3. ✅ 新增国内数据源 (华尔街见闻 / Google News 中文财经) 和"股市"品种类别
+4. ✅ 保留 v3.0 全部能力: 时间守卫/双层去重/全品种覆盖/AI精要/微信推送
+
+v3.0 历史:
+- 北京时间 07:30 / 19:30 精准推送
+- 双层去重: 批内去重 + 跨批次去重 (3天内不重复)
+- 全品种覆盖: 能源/贵金属/有色/黑色/谷物/油脂/软商品/航运/化工/农副
+- 专业数据源: Mining.com / OilPrice / WorldGrain / HellenicShipping 等
+- 智谱 GLM-4 精要摘要 (200-300字，数据类提炼要点)
+- Server酱 微信推送 + 品种分布统计
 """
 
 import os
@@ -69,6 +75,19 @@ logger = logging.getLogger(__name__)
 # 数据源 (全部实测可用，按品种细分)
 # ============================================================
 RSS_SOURCES = {
+    # ===== 国内财经 =====
+    "华尔街见闻": {
+        "url": "https://dedicated.wallstreetcn.com/rss.xml",
+        "priority": 9, "category": "宏观"
+    },
+    "Google中文财经": {
+        "url": "https://news.google.com/rss/search?q=when:24h+"
+               "(A%E8%82%A1+OR+%E6%B2%AA%E6%8C%87+OR+%E5%A4%AE%E8%A1%8C+OR+%E8%AF%81%E7%9B%91%E4%BC%9A"
+               "+OR+%E6%9C%9F%E8%B4%A7+OR+%E9%93%81%E7%9F%BF%E7%9F%B3+OR+%E8%B4%A7%E5%B8%81%E6%94%BF%E7%AD%96"
+               "+OR+%E6%9D%8E%E6%B0%8F%E6%8C%87%E6%95%B0+OR+%E7%9E%AA%E6%B2%B3%E8%82%A1%E5%B8%82)&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        "priority": 8, "category": "宏观"
+    },
+
     # ===== 能源 / 化工 =====
     "OilPrice.com": {
         "url": "https://oilprice.com/rss/main",
@@ -240,16 +259,36 @@ PRODUCT_KEYWORDS = {
         'stock market', 's&p 500', 'nasdaq', 'dow jones', 'vix', 'equities',
         'banking crisis', 'credit risk', 'default', 'sovereign debt',
         'bitcoin', 'crypto', 'ethereum',
+        # 中文宏观词
+        '央行', '中国人民银行', '降准', '降息', '加息', 'LPR', '货币政策', '公开市场操作',
+        '美联储', 'fomc会议', '通胀', 'cpi同比', 'ppi同比', 'pmi', 'gdp', '财政政策',
+        '国务院', '证监会', '金融监管总局', '发改委', '汇率', '人民币汇率', '逆回购',
+        '中期借贷便利', 'mlf', '社融', '进出口', '贸易顺差', '外汇储备',
+    ],
+    "股市": [
+        'stock market', 's&p 500', 'nasdaq', 'dow jones', 'equities', 'shares',
+        'shanghai composite', 'hang seng', 'nikkei', 'ftse 100', 'dax',
+        'a-share', 'a shares', 'csi 300', 'csi300', 'ipo', 'earnings', 'valuation',
+        'bull market', 'bear market', 'margin trading', 'northbound',
+        # 中文股市词
+        'A股', '沪指', '上证指数', '深证成指', '创业板', '科创板', '沪深300', '中证500',
+        '港股', '恒生指数', '恒生科技', '北向资金', '南向资金', '涨停', '跌停',
+        '股市', '股票', '纳指', '标普500', '道指', '两融', 'IPO', '印花税',
+        '股价', '市值', '券商', '基金', '公募', '私募', '散户', '成交额',
     ],
 }
 
-# 权重：品种关键词 > 地缘 > 宏观
+# 权重：品种关键词 > 股市/地缘 > 宏观
 CATEGORY_WEIGHTS = {
     "能源": 3.0, "贵金属": 3.0, "有色金属": 3.0, "黑色金属": 3.0,
     "谷物": 3.0, "油脂油料": 3.0, "软商品": 3.0, "农副产品": 3.0,
     "化工": 3.0, "航运": 3.0,
-    "地缘": 2.0, "宏观金融": 1.5,
+    "股市": 2.0, "地缘": 2.0, "宏观金融": 1.5,
 }
+
+# 要闻速览候选类别 (用于"国内外金融要闻提炼"板块)
+DIGEST_CATS = {'宏观金融', '股市', '地缘', '商品综合', '宏观', '金融'}
+DIGEST_SOURCES = {'华尔街见闻', 'Google中文财经'}  # 国内源优先进入国内要闻候选
 
 
 # ============================================================
@@ -611,12 +650,12 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
     if len(content) > 5000:
         content = content[:5000] + "\n...(已截断)"
 
-    prompt = f"""你是国际大宗商品与宏观策略分析师。阅读下面这篇英文新闻，输出中文精要。
+    prompt = f"""你是国际大宗商品与宏观策略分析师。阅读下面这篇新闻（可能是中文或英文），输出中文精要。
 
 【已识别的品种标签】: {', '.join(cats) if cats else '待判断'}
 
 要求：
-1. 相关性评分 1-10（10=对商品期货/宏观交易极重要）
+1. 相关性评分 1-10（10=对商品期货/股市/宏观交易极重要）
 2. 如果与以下领域**完全无关**（纯科技产品发布、娱乐八卦、体育赛事、社会轶事），只输出 SKIP
 3. 输出 200-350 字中文精要，必须包含：
    - 【核心事实】发生了什么（数字、主体、时间）
@@ -702,7 +741,8 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
 # ============================================================
 # 主处理流程
 # ============================================================
-def process(articles: list, state: dict) -> list:
+def process(articles: list, state: dict) -> tuple:
+    """返回 (最终入选文章, 要闻速览候选池)"""
     now_bj = datetime.now(BEIJING_TZ)
     recent_hashes = state.get('hashes', {})
     recent_events = [e.get('key', '') for e in state.get('events', [])]
@@ -823,7 +863,16 @@ def process(articles: list, state: dict) -> list:
     picked.sort(key=lambda x: x['ai']['score'], reverse=True)
     logger.info(f"最终入选: {len(picked)} 篇")
 
-    # ---- 5. 更新状态 ----
+    # ---- 5. 要闻速览候选池 (宏观/股市/地缘 + 国内源) ----
+    digest_pool = [
+        a for a in deduped
+        if (set(a['kw']['categories']) & DIGEST_CATS) or a['source'] in DIGEST_SOURCES
+    ]
+    digest_pool.sort(key=lambda x: x['ai']['score'], reverse=True)
+    digest_pool = digest_pool[:16]
+    logger.info(f"要闻速览候选池: {len(digest_pool)} 条")
+
+    # ---- 6. 更新状态 ----
     for art in picked:
         state['hashes'][art['hash']] = now_bj.isoformat()
         ev = art['ai'].get('event', '')
@@ -831,15 +880,129 @@ def process(articles: list, state: dict) -> list:
             state['events'].append({'key': ev, 'ts': now_bj.isoformat()})
     state = prune_hashes(state)
 
-    return picked
+    return picked, digest_pool
+
+
+# ============================================================
+# 要闻速览 (国内外金融要闻提炼)
+# ============================================================
+def fmt_time(art: dict) -> str:
+    """文章发布时间 → 北京时间 'MM-DD HH:MM'，缺失返回'时间未标'"""
+    p = art.get('published')
+    if not p:
+        return '时间未标'
+    return p.astimezone(BEIJING_TZ).strftime('%m-%d %H:%M')
+
+
+def digest_fallback(pool: list) -> dict:
+    """AI 不可用时的兜底：直接列候选标题"""
+    out = {'domestic': [], 'overseas': []}
+    for a in pool:
+        line = f"**{fmt_time(a)}**｜{a['title']}（{a['source']}）"
+        if a['source'] in DIGEST_SOURCES:
+            out['domestic'].append(line)
+        else:
+            out['overseas'].append(line)
+    out['domestic'] = out['domestic'][:5]
+    out['overseas'] = out['overseas'][:6]
+    return out
+
+
+def ai_digest(pool: list) -> dict:
+    """调用 AI 提炼国内外金融要闻速览。返回 {'domestic': [...], 'overseas': [...]}"""
+    if not pool:
+        return {'domestic': [], 'overseas': []}
+    fallback = digest_fallback(pool)
+
+    if not OPENAI_API_KEY:
+        logger.info("未配置 AI Key，要闻速览使用兜底列表")
+        return fallback
+
+    items_text = []
+    for i, a in enumerate(pool, 1):
+        cats = '/'.join(a['kw']['categories'][:2])
+        brief = (a['ai'].get('summary', '') or '')[:150]
+        items_text.append(
+            f"{i}. [发布时间: 北京时间 {fmt_time(a)}] [来源: {a['source']}] [类别: {cats}]\n"
+            f"   标题: {a['title']}\n"
+            f"   摘要: {brief}"
+        )
+    now = datetime.now(BEIJING_TZ)
+    prompt = f"""你是财经新闻编辑。下面是过去一天抓取到的财经新闻池（生成时间：北京时间 {now.strftime('%Y-%m-%d %H:%M')}）。请提炼出**当日国内外重要金融要闻速览**。
+
+要求：
+1. 输出两部分：【国内要闻】3-5 条、【海外要闻】4-6 条（国内指中国市场相关，海外指国际市场）
+2. 只选对股市、期货、汇率、货币政策、宏观经济、地缘局势真正重要的新闻；同一事件只出现一次
+3. 每条一行，格式严格为：- HH:MM｜要点（来源）
+   HH:MM 使用条目给出的北京时间发布时刻；若为"时间未标"则省略"HH:MM｜"部分
+4. 要点需包含关键数字/主体/影响方向，25-45 字，按重要性排序
+5. 严禁编造新闻池中没有的信息；若国内候选不足 3 条，有几条写几条
+
+新闻池：
+{chr(10).join(items_text)}
+
+严格按以下格式输出：
+【国内要闻】
+- HH:MM｜要点（来源）
+【海外要闻】
+- HH:MM｜要点（来源）
+"""
+
+    headers = {'Authorization': f'Bearer {OPENAI_API_KEY}', 'Content-Type': 'application/json'}
+
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{OPENAI_BASE_URL}/chat/completions",
+                headers=headers,
+                json={
+                    "model": OPENAI_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "你是专业的财经新闻编辑，擅长提炼当日要闻。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 900,
+                },
+                timeout=90
+            )
+            if resp.status_code != 200:
+                raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:150]}")
+
+            text = resp.json()['choices'][0]['message']['content'].strip()
+
+            def extract(block: str) -> list:
+                out = []
+                for ln in block.splitlines():
+                    ln = ln.strip()
+                    if ln.startswith('-'):
+                        item = ln.lstrip('- ').strip()
+                        if item:
+                            out.append(item)
+                return out
+
+            dom_m = re.search(r'【国内要闻】(.*?)(?=【海外要闻】|$)', text, re.DOTALL)
+            ovs_m = re.search(r'【海外要闻】(.*)', text, re.DOTALL)
+            d = extract(dom_m.group(1)) if dom_m else []
+            o = extract(ovs_m.group(1)) if ovs_m else []
+            if d or o:
+                logger.info(f"要闻速览生成成功: 国内 {len(d)} 条 / 海外 {len(o)} 条")
+                return {'domestic': d[:5], 'overseas': o[:6]}
+            logger.warning(f"要闻速览解析为空 (尝试 {attempt + 1}/2)")
+        except Exception as e:
+            logger.warning(f"要闻速览生成失败({attempt + 1}/2): {str(e)[:80]}")
+
+    logger.info("要闻速览使用兜底列表")
+    return fallback
 
 
 # ============================================================
 # 推送格式
 # ============================================================
-def format_push(articles: list, period: str) -> str:
+def format_push(articles: list, period: str, digest: dict = None) -> str:
     now = datetime.now(BEIJING_TZ)
     period_cn = "早报" if period == 'morning' else "晚报"
+    digest = digest or {'domestic': [], 'overseas': []}
 
     # 品种分布统计
     dist = {}
@@ -850,7 +1013,7 @@ def format_push(articles: list, period: str) -> str:
     dist_line = " | ".join(f"{k} {v}" for k, v in sorted(dist.items(), key=lambda x: -x[1])[:10])
 
     lines = [
-        f"# 🌍 国际财经·期货要闻 {period_cn}",
+        f"# 🌍 财经·期货要闻 {period_cn}",
         f"> **{now.strftime('%Y年%m月%d日 %H:%M')}** | 共 **{len(articles)}** 条",
         "",
         f"**品种分布**: {dist_line}",
@@ -859,13 +1022,28 @@ def format_push(articles: list, period: str) -> str:
         "",
     ]
 
+    # ---- 国内外金融要闻速览 ----
+    if digest.get('domestic') or digest.get('overseas'):
+        lines.append("## 📰 国内外金融要闻速览")
+        lines.append("")
+        if digest.get('domestic'):
+            lines.append("**🇨🇳 国内**")
+            lines.extend(f"- {l}" for l in digest['domestic'])
+            lines.append("")
+        if digest.get('overseas'):
+            lines.append("**🌏 海外**")
+            lines.extend(f"- {l}" for l in digest['overseas'])
+            lines.append("")
+        lines.append("---")
+        lines.append("")
+
     for i, a in enumerate(articles, 1):
         ai = a.get('ai', {})
         cats = a['kw']['categories']
         cat_str = "/".join(cats[:3])
 
         lines.append(f"## {i}. {a['title']}")
-        lines.append(f"*{a['source']} | {cat_str} | 相关度 {ai.get('score', '?')}/10*")
+        lines.append(f"*{a['source']} | ⏱ 发布于 {fmt_time(a)} (北京时间) | {cat_str} | 相关度 {ai.get('score', '?')}/10*")
         if ai.get('tags'):
             lines.append(f"*{ai['tags']}*")
         lines.append("")
@@ -876,7 +1054,7 @@ def format_push(articles: list, period: str) -> str:
         lines.append("---")
         lines.append("")
 
-    lines.append(f"<small>FinNewsCollectionBot v3.0 | 北京时间 {now.strftime('%H:%M')}</small>")
+    lines.append(f"<small>FinNewsCollectionBot v3.1 | 北京时间 {now.strftime('%H:%M')}</small>")
     return '\n'.join(lines)
 
 
@@ -916,7 +1094,7 @@ def main():
 
     now = datetime.now(BEIJING_TZ)
     logger.info("=" * 60)
-    logger.info(f"FinNewsCollectionBot v3.0 | 北京时间 {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"FinNewsCollectionBot v3.1 | 北京时间 {now.strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"测试模式: {test_mode} | 强制运行: {force}")
     logger.info("=" * 60)
 
@@ -941,15 +1119,15 @@ def main():
         period = 'morning' if now.hour < 12 else 'evening'
 
     # ---- 抓取 ----
-    logger.info("\n📡 [1/3] 抓取 RSS...")
+    logger.info("\n📡 [1/4] 抓取 RSS...")
     articles = fetch_rss_feeds()
     if not articles:
         logger.error("未获取到任何文章")
         return
 
     # ---- 筛选 + AI ----
-    logger.info("\n🔍 [2/3] 筛选 + AI 摘要...")
-    picked = process(articles, state)
+    logger.info("\n🔍 [2/4] 筛选 + AI 摘要...")
+    picked, digest_pool = process(articles, state)
 
     if not picked:
         logger.warning("无文章通过筛选")
@@ -957,11 +1135,15 @@ def main():
             print("（测试模式：无结果，不发推送）")
         return
 
+    # ---- 要闻速览提炼 ----
+    logger.info("\n📰 [3/4] 提炼国内外金融要闻速览...")
+    digest = ai_digest(digest_pool)
+
     # ---- 推送 ----
-    logger.info("\n📤 [3/3] 推送...")
-    content = format_push(picked, period)
+    logger.info("\n📤 [4/4] 推送...")
+    content = format_push(picked, period, digest)
     period_cn = "早报" if period == 'morning' else "晚报"
-    title = f"🌍 期货要闻{period_cn} · {len(picked)}条 ({now.strftime('%m/%d')})"
+    title = f"🌍 财经要闻{period_cn} · {len(picked)}条 ({now.strftime('%m/%d')})"
 
     if not test_mode:
         if push_wechat(content, title):
