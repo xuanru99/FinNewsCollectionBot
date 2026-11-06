@@ -76,20 +76,17 @@ logger = logging.getLogger(__name__)
 # ============================================================
 RSS_SOURCES = {
     # ===== 顶级权威媒体 (重点来源) =====
-    "WSJ Markets": {   # 华尔街日报·市场 (RSS标题+摘要；全文付费墙走摘要提炼)
-        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "WSJ Markets": {   # 华尔街日报 via Google News (DJ 封锁 GitHub IP，走 Google 通道)
+        "url": "https://news.google.com/rss/search?q=site:wsj.com+when:24h+"
+               "(markets+OR+Federal+Reserve+OR+commodities+OR+oil+OR+gold+OR+economy+OR+stocks)&hl=en-US&gl=US&ceid=US:en",
         "priority": 10, "category": "金融"
-    },
-    "WSJ World": {     # 华尔街日报·国际/地缘
-        "url": "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
-        "priority": 9, "category": "地缘"
     },
     "Bloomberg Markets": {
         "url": "https://feeds.bloomberg.com/markets/news.rss",
         "priority": 10, "category": "金融"
     },
-    "MarketWatch Pulse": {  # 道琼斯旗下·实时快讯
-        "url": "https://feeds.marketwatch.com/marketwatch/marketpulse/",
+    "MarketWatch Top": {  # 道琼斯旗下·头条
+        "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
         "priority": 9, "category": "金融"
     },
     "The Hill": {      # 美国政治/政策→市场传导
@@ -187,10 +184,6 @@ RSS_SOURCES = {
     "CNBC World": {
         "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362",
         "priority": 7, "category": "地缘"
-    },
-    "MarketWatch Top": {
-        "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
-        "priority": 8, "category": "金融"
     },
     "Guardian Business": {
         "url": "https://www.theguardian.com/business/rss",
@@ -534,6 +527,10 @@ def get_article_full_text(url: str, timeout: int = 12) -> Optional[str]:
     try:
         resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
         resp.raise_for_status()
+        # 重定向后的最终 URL 若命中付费墙域（如 Google News → wsj.com），放弃爬正文
+        if any(d in resp.url for d in PAYWALL_DOMAINS):
+            logger.debug(f"重定向至付费墙，放弃全文: {resp.url[:70]}")
+            return None
         soup = BeautifulSoup(resp.text, 'html.parser')
         for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'iframe', 'noscript']):
             tag.decompose()
