@@ -69,8 +69,10 @@ FLASH_ENABLED = True
 FLASH_MAX_PER_DAY = 3       # 每天最多加发条数（避免打扰）
 FLASH_SCORE_MIN = 8         # AI 紧迫评分 >= 8 才推送
 FLASH_MAX_AGE_H = 4         # 只看最近 N 小时内发布的文章
-FLASH_QUIET_HOURS = (0, 6)  # 00:00-06:30 免打扰（夜间突发并入早报）
 FLASH_MAX_AI_CALLS = 4      # 每次扫描最多 AI 调用数
+# 加发时间窗 (北京时间)：仅 07:30-15:00 实时推送突发
+# 07:30 前发生的 → 并入早报；15:00-19:30 发生的 → 并入晚报；19:30 后 → 并入次日早报
+FLASH_WINDOW = (7, 30, 15, 0)
 
 # 突发级别关键词（标题初筛用，门槛要高，只留真正突发）
 URGENT_KEYWORDS = [
@@ -1225,9 +1227,10 @@ def breaking_scan(state: dict) -> None:
     now_bj = datetime.now(BEIJING_TZ)
     today = now_bj.strftime('%Y-%m-%d')
 
-    # 免打扰时段
-    quiet_s, quiet_e = FLASH_QUIET_HOURS
-    if quiet_s <= now_bj.hour < quiet_e:
+    # 只在 07:30-15:00 实时加发；其余时段突发并入下一期早/晚报
+    fs_h, fs_m, fe_h, fe_m = FLASH_WINDOW
+    cur = now_bj.hour * 60 + now_bj.minute
+    if not (fs_h * 60 + fs_m <= cur <= fe_h * 60 + fe_m):
         return
 
     # 当日限额
@@ -1293,7 +1296,7 @@ def breaking_scan(state: dict) -> None:
         f"- 来源: {src}\n"
         f"- 时间: {time_str}\n"
         f"- [查看原文]({link})\n\n"
-        f"> 详细分析将并入下一期早/晚报（北京时间 07:30 / 19:30）"
+        f"> 详细分析将并入下一期早/晚报（北京时间 07:30 / 19:30 准点送达）"
     )
     title = f"🚨 突发快讯 · {best['title'][:24]}"
 
