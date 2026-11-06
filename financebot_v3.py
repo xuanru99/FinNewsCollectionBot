@@ -64,6 +64,35 @@ MAX_ARTICLES = 18       # 单次推送最多条数
 MAX_PROCESS = 40        # 最多处理文章数
 AI_CONCURRENCY = 4      # AI 并发数
 
+# ---- 突发快讯 (轮询时窗口外扫描，发现重大突发立即加发) ----
+FLASH_ENABLED = True
+FLASH_MAX_PER_DAY = 3       # 每天最多加发条数（避免打扰）
+FLASH_SCORE_MIN = 8         # AI 紧迫评分 >= 8 才推送
+FLASH_MAX_AGE_H = 4         # 只看最近 N 小时内发布的文章
+FLASH_QUIET_HOURS = (0, 6)  # 00:00-06:30 免打扰（夜间突发并入早报）
+FLASH_MAX_AI_CALLS = 4      # 每次扫描最多 AI 调用数
+
+# 突发级别关键词（标题初筛用，门槛要高，只留真正突发）
+URGENT_KEYWORDS = [
+    # 军事/地缘突发
+    'breaking', 'urgent', 'missile', 'strikes', 'invasion', 'war breaks',
+    'military strike', 'air strike', 'drone attack', 'explosion', 'assassinated',
+    'state of emergency', 'coup', 'evacuat', 'ceasefire collapses',
+    'red sea', 'strait of hormuz', 'blockade', 'seized',
+    # 供给突发
+    'opec', 'output cut', 'export ban', 'export halt', 'supply halt',
+    'shut down', 'shutdown', 'halted production', 'force majeure',
+    'mine collapse', 'mine accident', 'refinery fire', 'pipeline attack',
+    'pipeline damaged', 'port closed', 'port shut', 'strike at',
+    # 金融突发
+    'emergency rate', 'emergency meeting', 'flash crash', 'circuit breaker',
+    'default', 'bankruptcy', 'bailout', 'bank failure', 'devaluation',
+    'record high', 'record low', 'plunges', 'surges', 'soars', 'crashes',
+    'resign', 'assassinat', 'sanctions', 'tariffs on', 'tariff hike',
+    # 中文源
+    '突发', '紧急', '刚刚', '重磅', '宣布', '轰炸', '制裁', '停产', '停火',
+]
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -1127,6 +1156,162 @@ def push_wechat(content: str, title: str) -> bool:
 
 
 # ============================================================
+# 突发快讯扫描（窗口外轮询时执行）
+# ============================================================
+def ai_flash_check(article: dict) -> Optional[dict]:
+    """AI 判定是否为需要立即推送的重大突发，并生成 100-150 字快讯"""
+    if not OPENAI_API_KEY:
+        return None
+
+    title = article.get('title', '')
+    content = (article.get('full_text', '') or article.get('summary', ''))[:2500]
+
+    prompt = f"""你是值班财经快讯编辑。判断下面这条新闻是否为**重大突发**——即会立刻影响商品期货/股市/汇市行情、专业交易者需要马上知道的事件（如：军事冲突升级、OPEC紧急减产、主要品种供给中断、央行紧急行动、重大制裁、超大级别价格波动等）。
+
+注意：
+- 例行数据发布、常规行情波动、分析评论、预期炒作 → 不算突发
+- 只有一手事实事件才算突发，宁可漏判不可误报
+- 来源: {article.get('source', '')}（WSJ/Bloomberg/Reuters/MarketWatch 等一线媒体报道可信度高）
+
+标题: {title}
+
+内容:
+{content}
+
+严格按以下格式输出：
+【突发评分】1-10（9-10=必须立即推送的突发；7-8=重要但不紧急；6以下=普通）
+【快讯】
+（若评分>=9，输出 100-150 字中文快讯：核心事实 + 影响品种方向；若<9，此栏输出"无"）
+"""
+    headers = {'Authorization': f'Bearer {OPENAI_API_KEY}', 'Content-Type': 'application/json'}
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{OPENAI_BASE_URL}/chat/completions",
+                headers=headers,
+                json={
+                    "model": OPENAI_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "你是财经快讯值班编辑，判断要果断，宁缺毋滥。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.2,
+                    "max_tokens": 500,
+                },
+                timeout=60
+            )
+            if resp.status_code != 200:
+                raise RuntimeError(f"HTTP {resp.status_code}")
+            text = resp.json()['choices'][0]['message']['content'].strip()
+            score_m = re.search(r'【突发评分】\s*[:：]?\s*(\d+)', text)
+            flash_m = re.search(r'【快讯】\s*[:：]?\s*\n?(.*)', text, re.DOTALL)
+            score = int(score_m.group(1)) if score_m else 0
+            body = flash_m.group(1).strip() if flash_m else ''
+            if score >= FLASH_SCORE_MIN and body and body not in ('无', '（无）', 'N/A'):
+                return {'score': score, 'flash': body}
+            return None
+        except Exception as e:
+            logger.warning(f"  突发判定失败({attempt+1}/2): {str(e)[:60]}")
+            if attempt < 1:
+                time.sleep(2)
+    return None
+
+
+def breaking_scan(state: dict) -> None:
+    """窗口外的突发扫描：发现重大突发 → 立即加发一条短快讯"""
+    if not FLASH_ENABLED:
+        return
+
+    now_bj = datetime.now(BEIJING_TZ)
+    today = now_bj.strftime('%Y-%m-%d')
+
+    # 免打扰时段
+    quiet_s, quiet_e = FLASH_QUIET_HOURS
+    if quiet_s <= now_bj.hour < quiet_e:
+        return
+
+    # 当日限额
+    if state.get('flash_date') == today and state.get('flash_count', 0) >= FLASH_MAX_PER_DAY:
+        return
+
+    # ---- 抓取 ----
+    articles = fetch_rss_feeds()
+    if not articles:
+        return
+
+    recent_hashes = state.get('hashes', {})
+    recent_events = [e.get('key', '') for e in state.get('events', [])]
+
+    # ---- 关键词初筛（只看最近 FLASH_MAX_AGE_H 小时 + 突发关键词）----
+    candidates = []
+    for art in articles:
+        p = art.get('published')
+        if p:
+            age_h = (datetime.now(timezone.utc) - p).total_seconds() / 3600
+            if age_h > FLASH_MAX_AGE_H:
+                continue
+        h = title_hash(art['title'])
+        if h in recent_hashes:
+            continue
+        title_l = art['title'].lower()
+        if not any(kw.lower() in title_l for kw in URGENT_KEYWORDS):
+            continue
+        # 与已推送事件相似 → 跳过
+        if any(event_similar(art['title'][:40], ev) for ev in recent_events):
+            continue
+        candidates.append(art)
+
+    if not candidates:
+        logger.info("🔍 突发扫描: 无疑似突发")
+        return
+
+    candidates.sort(key=lambda x: x.get('priority', 5), reverse=True)
+    candidates = candidates[:FLASH_MAX_AI_CALLS]
+    logger.info(f"🚨 突发扫描: {len(candidates)} 条疑似，AI 核实中...")
+
+    # ---- AI 核实 ----
+    best = None
+    for art in candidates:
+        res = ai_flash_check(art)
+        if res and (not best or res['score'] > best['score']):
+            art['flash'] = res
+            best = art
+
+    if not best:
+        logger.info("🔍 突发扫描: AI 判定均非突发")
+        return
+
+    # ---- 推送快讯 ----
+    f = best['flash']
+    src = best.get('source', '')
+    link = best.get('link', '')
+    time_str = fmt_time(best)
+    content = (
+        f"**{f['flash']}**\n\n"
+        f"---\n"
+        f"🚨 **突发快讯** | 突发评分 {f['score']}/10\n\n"
+        f"- 来源: {src}\n"
+        f"- 时间: {time_str}\n"
+        f"- [查看原文]({link})\n\n"
+        f"> 详细分析将并入下一期早/晚报（北京时间 07:30 / 19:30）"
+    )
+    title = f"🚨 突发快讯 · {best['title'][:24]}"
+
+    if push_wechat(content, title):
+        h = title_hash(best['title'])
+        state['hashes'][h] = now_bj.isoformat()  # 记录 hash，晚报不会重复
+        ev = best.get('flash', {}).get('flash', '')[:40]
+        state['events'].append({'key': ev, 'ts': now_bj.isoformat()})
+        if state.get('flash_date') == today:
+            state['flash_count'] = state.get('flash_count', 0) + 1
+        else:
+            state['flash_date'] = today
+            state['flash_count'] = 1
+        save_state(state)
+        logger.info(f"✅ 突发快讯已推送: {best['title'][:50]} (当日第 {state['flash_count']} 条)")
+
+
+# ============================================================
 # 入口
 # ============================================================
 def main():
@@ -1145,6 +1330,11 @@ def main():
     if not test_mode and not force:
         should_run, period = check_time_window()
         if not should_run:
+            # 窗口外：执行突发快讯扫描（发现重大突发立即加发）
+            try:
+                breaking_scan(state)
+            except Exception as e:
+                logger.warning(f"突发扫描异常: {e}")
             logger.info(f"⏰ 当前 {now.strftime('%H:%M')} 不在推送窗口内，跳过")
             logger.info(f"   早报窗口: {MORNING_WINDOW[0]:02d}:{MORNING_WINDOW[1]:02d}-{MORNING_WINDOW[2]:02d}:{MORNING_WINDOW[3]:02d}")
             logger.info(f"   晚报窗口: {EVENING_WINDOW[0]:02d}:{EVENING_WINDOW[1]:02d}-{EVENING_WINDOW[2]:02d}:{EVENING_WINDOW[3]:02d}")
