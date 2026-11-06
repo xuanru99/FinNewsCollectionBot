@@ -75,6 +75,41 @@ logger = logging.getLogger(__name__)
 # 数据源 (全部实测可用，按品种细分)
 # ============================================================
 RSS_SOURCES = {
+    # ===== 顶级权威媒体 (重点来源) =====
+    "WSJ Markets": {   # 华尔街日报·市场 (RSS标题+摘要；全文付费墙走摘要提炼)
+        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+        "priority": 10, "category": "金融"
+    },
+    "WSJ World": {     # 华尔街日报·国际/地缘
+        "url": "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
+        "priority": 9, "category": "地缘"
+    },
+    "Bloomberg Markets": {
+        "url": "https://feeds.bloomberg.com/markets/news.rss",
+        "priority": 10, "category": "金融"
+    },
+    "MarketWatch Pulse": {  # 道琼斯旗下·实时快讯
+        "url": "https://feeds.marketwatch.com/marketwatch/marketpulse/",
+        "priority": 9, "category": "金融"
+    },
+    "The Hill": {      # 美国政治/政策→市场传导
+        "url": "https://thehill.com/feed/",
+        "priority": 6, "category": "地缘"
+    },
+    # Yahoo 专题 feed = 路透/彭博/美联社文章的免费全文转载
+    "Yahoo 市场头条": {
+        "url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC&region=US&lang=en-US",
+        "priority": 9, "category": "金融"
+    },
+    "Yahoo 黄金": {
+        "url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC%3DF&region=US&lang=en-US",
+        "priority": 9, "category": "贵金属"
+    },
+    "Yahoo 原油": {
+        "url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=CL%3DF&region=US&lang=en-US",
+        "priority": 9, "category": "能源"
+    },
+
     # ===== 国内财经 =====
     "华尔街见闻": {
         "url": "https://dedicated.wallstreetcn.com/rss.xml",
@@ -149,17 +184,13 @@ RSS_SOURCES = {
         "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
         "priority": 8, "category": "宏观"
     },
-    "CNBC Finance": {
-        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
-        "priority": 7, "category": "金融"
-    },
     "CNBC World": {
         "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362",
         "priority": 7, "category": "地缘"
     },
     "MarketWatch Top": {
         "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
-        "priority": 6, "category": "金融"
+        "priority": 8, "category": "金融"
     },
     "Guardian Business": {
         "url": "https://www.theguardian.com/business/rss",
@@ -171,11 +202,11 @@ RSS_SOURCES = {
     },
     "Bloomberg Markets": {
         "url": "https://feeds.bloomberg.com/markets/news.rss",
-        "priority": 8, "category": "金融"
+        "priority": 10, "category": "金融"
     },
-    "Reuters Business": {
+    "Reuters via Google": {
         "url": "https://news.google.com/rss/search?q=site:reuters.com+(commodities+OR+oil+OR+metals+OR+grain)&hl=en-US&gl=US&ceid=US:en",
-        "priority": 8, "category": "商品综合"
+        "priority": 9, "category": "商品综合"
     },
 }
 
@@ -486,7 +517,14 @@ def check_time_window() -> tuple:
 # ============================================================
 # 文章抓取
 # ============================================================
+# 付费墙/反爬严格域名：跳过全文爬取，直接用 RSS 摘要提炼
+PAYWALL_DOMAINS = ('wsj.com', 'ft.com', 'bloomberg.com/news/articles')
+
+
 def get_article_full_text(url: str, timeout: int = 12) -> Optional[str]:
+    if any(d in url for d in PAYWALL_DOMAINS):
+        logger.debug(f"付费墙域名，跳过全文: {url[:60]}")
+        return None
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -662,6 +700,8 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
    - 【市场影响】对哪些品种/资产有影响，方向（利多/利空）
    - 若原文含关键数据（价格、库存、产量、持仓、百分比），用"· "逐条列出
 4. 不要逐句翻译，要提炼。面向专业投资者，语言精炼。
+5. 来源权威性：WSJ、Bloomberg、Reuters、MarketWatch 等一线媒体的报道，忠实采用其表述和数据，不要演绎补充；数据以原文为准。
+6. 如果"正文"部分很短（只有导语/摘要级别），基于已有信息输出 80-150 字精炼短条目，只写确定的信息，禁止编造细节和数据。
 
 标题: {title}
 来源: {article.get('source', '')}
