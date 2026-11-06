@@ -974,6 +974,7 @@ def ai_digest(pool: list) -> dict:
    HH:MM 使用条目给出的北京时间发布时刻；若为"时间未标"则省略"HH:MM｜"部分
 4. 要点需包含关键数字/主体/影响方向，25-45 字，按重要性排序
 5. 严禁编造新闻池中没有的信息；若国内候选不足 3 条，有几条写几条
+6. 严禁输出"要点（来源未提供）"之类的占位条目——每一行都必须是新闻池里的真实新闻，宁缺毋滥
 
 新闻池：
 {chr(10).join(items_text)}
@@ -1014,8 +1015,11 @@ def ai_digest(pool: list) -> dict:
                     ln = ln.strip()
                     if ln.startswith('-'):
                         item = ln.lstrip('- ').strip()
-                        if item:
-                            out.append(item)
+                        # 过滤 AI 生成的占位条目
+                        bad = ('来源未提供', '时间未标｜要点', '占位')
+                        if not item or any(b in item for b in bad) or len(item) < 12:
+                            continue
+                        out.append(item)
                 return out
 
             dom_m = re.search(r'【国内要闻】(.*?)(?=【海外要闻】|$)', text, re.DOTALL)
