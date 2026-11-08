@@ -106,133 +106,213 @@ logger = logging.getLogger(__name__)
 # 数据源 (全部实测可用，按品种细分)
 # ============================================================
 RSS_SOURCES = {
-    # ===== 顶级权威媒体 (重点来源) =====
-    "WSJ Markets": {   # 华尔街日报 via Google News (DJ 封锁 GitHub IP，走 Google 通道)
-        "url": "https://news.google.com/rss/search?q=site:wsj.com+when:24h+"
-               "(markets+OR+Federal+Reserve+OR+commodities+OR+oil+OR+gold+OR+economy+OR+stocks)&hl=en-US&gl=US&ceid=US:en",
-        "priority": 10, "category": "金融"
+    # ==================== Tier 0 · 官方一手发布（事实源头） ====================
+    "Fed 货币政策": {
+        "url": "https://www.federalreserve.gov/feeds/press_monetary.xml",
+        "priority": 10, "category": "宏观", "tier": 0
     },
-    "Bloomberg Markets": {
+    "Fed 新闻发布": {
+        "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+        "priority": 9, "category": "宏观", "tier": 0
+    },
+    "ECB 官方": {
+        "url": "https://www.ecb.europa.eu/rss/press.html",
+        "priority": 9, "category": "宏观", "tier": 0
+    },
+    "EIA 官方": {
+        "url": "https://www.eia.gov/rss/press_rss.xml",
+        "priority": 9, "category": "能源", "tier": 0
+    },
+    "EIA 能源展望": {
+        "url": "https://www.eia.gov/rss/todayinenergy.xml",
+        "priority": 8, "category": "能源", "tier": 0
+    },
+    "USDA 官方": {   # 农业报告 (WASDE/作物报告)
+        "url": "https://news.google.com/rss/search?q=site:usda.gov+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 10, "category": "谷物", "tier": 0
+    },
+    "OPEC 官方": {
+        "url": "https://news.google.com/rss/search?q=site:opec.org+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 9, "category": "能源", "tier": 0
+    },
+    "IEA 官方": {
+        "url": "https://news.google.com/rss/search?q=site:iea.org+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 8, "category": "能源", "tier": 0
+    },
+    "BLS 官方": {    # 非农/CPI/PPI
+        "url": "https://news.google.com/rss/search?q=site:bls.gov+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 9, "category": "宏观", "tier": 0
+    },
+    "LME 官方": {
+        "url": "https://news.google.com/rss/search?q=site:lme.com+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 8, "category": "有色金属", "tier": 0
+    },
+    "美国财政部/OFAC": {  # 制裁清单直接影响能源金属
+        "url": "https://news.google.com/rss/search?q=site:treasury.gov+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 8, "category": "地缘", "tier": 0
+    },
+    "CFTC 持仓": {
+        "url": "https://news.google.com/rss/search?q=site:cftc.gov+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 7, "category": "金融", "tier": 0
+    },
+    "CME 官方": {
+        "url": "https://news.google.com/rss/search?q=site:cmegroup.com+when:3d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 7, "category": "金融", "tier": 0
+    },
+
+    # ==================== Tier 1 · 通讯社 / 顶级财经 ====================
+    "Bloomberg 市场": {
         "url": "https://feeds.bloomberg.com/markets/news.rss",
-        "priority": 10, "category": "金融"
+        "priority": 10, "category": "金融", "tier": 1
     },
-    "MarketWatch Top": {  # 道琼斯旗下·头条
+    "Bloomberg 政治": {
+        "url": "https://feeds.bloomberg.com/politics/news.rss",
+        "priority": 9, "category": "地缘", "tier": 1
+    },
+    "Bloomberg 经济": {
+        "url": "https://feeds.bloomberg.com/economics/news.rss",
+        "priority": 9, "category": "宏观", "tier": 1
+    },
+    "Reuters 商品": {
+        "url": "https://news.google.com/rss/search?q=site:reuters.com+"
+               "(commodities+OR+oil+OR+metals+OR+grain+OR+futures)+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 10, "category": "商品综合", "tier": 1
+    },
+    "Reuters 市场": {
+        "url": "https://news.google.com/rss/search?q=site:reuters.com+"
+               "(markets+OR+Federal+Reserve+OR+inflation+OR+economy)+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 9, "category": "金融", "tier": 1
+    },
+    "WSJ 市场": {
+        "url": "https://news.google.com/rss/search?q=site:wsj.com+when:24h+"
+               "(markets+OR+Federal+Reserve+OR+commodities+OR+oil+OR+gold+OR+economy+OR+stocks+OR+bonds)"
+               "&hl=en-US&gl=US&ceid=US:en",
+        "priority": 10, "category": "金融", "tier": 1
+    },
+    "WSJ 国际": {
+        "url": "https://news.google.com/rss/search?q=site:wsj.com+when:24h+"
+               "(world+OR+china+OR+geopolitics+OR+sanctions+OR+trade)&hl=en-US&gl=US&ceid=US:en",
+        "priority": 9, "category": "地缘", "tier": 1
+    },
+    "FT 金融": {
+        "url": "https://news.google.com/rss/search?q=site:ft.com+when:24h+"
+               "(markets+OR+commodities+OR+Federal+Reserve+OR+economy+OR+rates)+&hl=en-US&gl=US&ceid=US:en",
+        "priority": 9, "category": "金融", "tier": 1
+    },
+    "Barron's": {
+        "url": "https://news.google.com/rss/search?q=site:barrons.com+when:24h&hl=en-US&gl=US&ceid=US:en",
+        "priority": 8, "category": "金融", "tier": 1
+    },
+    "道琼斯实时快讯": {
+        "url": "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines",
+        "priority": 9, "category": "金融", "tier": 1
+    },
+    "MarketWatch 头条": {
         "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
-        "priority": 9, "category": "金融"
+        "priority": 8, "category": "金融", "tier": 1
     },
-    "The Hill": {      # 美国政治/政策→市场传导
-        "url": "https://thehill.com/feed/",
-        "priority": 6, "category": "地缘"
-    },
-    # Yahoo 专题 feed = 路透/彭博/美联社文章的免费全文转载
-    "Yahoo 市场头条": {
+    "Yahoo 市场": {   # 路透/彭博/美联社免费全文转载
         "url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC&region=US&lang=en-US",
-        "priority": 9, "category": "金融"
+        "priority": 8, "category": "金融", "tier": 1
     },
     "Yahoo 黄金": {
         "url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC%3DF&region=US&lang=en-US",
-        "priority": 9, "category": "贵金属"
+        "priority": 8, "category": "贵金属", "tier": 1
     },
     "Yahoo 原油": {
         "url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=CL%3DF&region=US&lang=en-US",
-        "priority": 9, "category": "能源"
+        "priority": 8, "category": "能源", "tier": 1
+    },
+    "Nikkei Asia": {
+        "url": "https://news.google.com/rss/search?q=site:asia.nikkei.com+when:2d&hl=en-US&gl=US&ceid=US:en",
+        "priority": 7, "category": "地缘", "tier": 1
     },
 
-    # ===== 国内财经 =====
+    # ==================== Tier 2 · 行业权威 ====================
+    "OilPrice": {
+        "url": "https://oilprice.com/rss/main",
+        "priority": 8, "category": "能源", "tier": 2
+    },
+    "Mining.com": {
+        "url": "https://www.mining.com/feed/",
+        "priority": 8, "category": "金属矿业", "tier": 2
+    },
+    "World Grain": {
+        "url": "https://www.world-grain.com/rss/articles",
+        "priority": 7, "category": "谷物", "tier": 2
+    },
+    "Farm Progress": {
+        "url": "https://www.farmprogress.com/rss.xml",
+        "priority": 6, "category": "农产品", "tier": 2
+    },
+    "Hellenic Shipping": {
+        "url": "https://www.hellenicshippingnews.com/feed/",
+        "priority": 7, "category": "航运", "tier": 2
+    },
+    "gCaptain": {
+        "url": "https://gcaptain.com/feed/",
+        "priority": 6, "category": "航运", "tier": 2
+    },
+    "Splash247": {
+        "url": "https://splash247.com/feed/",
+        "priority": 6, "category": "航运", "tier": 2
+    },
+    "Nasdaq Commodities": {
+        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Commodities",
+        "priority": 7, "category": "商品综合", "tier": 2
+    },
     "华尔街见闻": {
         "url": "https://dedicated.wallstreetcn.com/rss.xml",
-        "priority": 9, "category": "宏观"
+        "priority": 7, "category": "宏观", "tier": 2
+    },
+
+    # ==================== Tier 3 · 补充来源（仅补位） ====================
+    "CNBC Markets": {
+        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+        "priority": 5, "category": "金融", "tier": 3
+    },
+    "CNBC Economy": {
+        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
+        "priority": 5, "category": "宏观", "tier": 3
+    },
+    "CNBC World": {
+        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362",
+        "priority": 4, "category": "地缘", "tier": 3
+    },
+    "The Hill": {
+        "url": "https://thehill.com/feed/",
+        "priority": 5, "category": "地缘", "tier": 3
+    },
+    "Nasdaq Politics": {
+        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Politics",
+        "priority": 4, "category": "地缘", "tier": 3
+    },
+    "Guardian Business": {
+        "url": "https://www.theguardian.com/business/rss",
+        "priority": 4, "category": "金融", "tier": 3
+    },
+    "Guardian World": {
+        "url": "https://www.theguardian.com/world/rss",
+        "priority": 3, "category": "地缘", "tier": 3
+    },
+    "FXStreet": {
+        "url": "https://www.fxstreet.com/rss/news",
+        "priority": 4, "category": "宏观", "tier": 3
     },
     "Google中文财经": {
         "url": "https://news.google.com/rss/search?q=when:24h+"
                "(A%E8%82%A1+OR+%E6%B2%AA%E6%8C%87+OR+%E5%A4%AE%E8%A1%8C+OR+%E8%AF%81%E7%9B%91%E4%BC%9A"
                "+OR+%E6%9C%9F%E8%B4%A7+OR+%E9%93%81%E7%9F%BF%E7%9F%B3+OR+%E8%B4%A7%E5%B8%81%E6%94%BF%E7%AD%96"
-               "+OR+%E6%9D%8E%E6%B0%8F%E6%8C%87%E6%95%B0+OR+%E7%9E%AA%E6%B2%B3%E8%82%A1%E5%B8%82)&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
-        "priority": 8, "category": "宏观"
-    },
-
-    # ===== 能源 / 化工 =====
-    "OilPrice.com": {
-        "url": "https://oilprice.com/rss/main",
-        "priority": 10, "category": "能源"
-    },
-    "CNBC Energy": {
-        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Energy",
-        "priority": 9, "category": "能源"
-    },
-
-    # ===== 金属 / 矿业 (贵金属+有色+黑色) =====
-    "Mining.com": {
-        "url": "https://www.mining.com/feed/",
-        "priority": 10, "category": "金属矿业"
-    },
-    "Nasdaq Commodities": {
-        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Commodities",
-        "priority": 9, "category": "商品综合"
-    },
-    "Nasdaq Politics": {
-        "url": "https://www.nasdaq.com/feed/rssoutbound?category=Politics",
-        "priority": 6, "category": "地缘"
-    },
-    "FXStreet": {
-        "url": "https://www.fxstreet.com/rss/news",
-        "priority": 6, "category": "宏观"
-    },
-
-    # ===== 农产品 / 谷物 / 油脂 =====
-    "World Grain": {
-        "url": "https://www.world-grain.com/rss/articles",
-        "priority": 9, "category": "谷物"
-    },
-    "Farm Progress": {
-        "url": "https://www.farmprogress.com/rss.xml",
-        "priority": 8, "category": "农产品"
-    },
-
-    # ===== 航运 =====
-    "Hellenic Shipping News": {
-        "url": "https://www.hellenicshippingnews.com/feed/",
-        "priority": 9, "category": "航运"
-    },
-    "gCaptain": {
-        "url": "https://gcaptain.com/feed/",
-        "priority": 7, "category": "航运"
-    },
-    "Splash247": {
-        "url": "https://splash247.com/feed/",
-        "priority": 7, "category": "航运"
-    },
-
-    # ===== 综合财经 / 地缘 =====
-    "CNBC Markets": {
-        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-        "priority": 8, "category": "金融"
-    },
-    "CNBC Economy": {
-        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
-        "priority": 8, "category": "宏观"
-    },
-    "CNBC World": {
-        "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362",
-        "priority": 7, "category": "地缘"
-    },
-    "Guardian Business": {
-        "url": "https://www.theguardian.com/business/rss",
-        "priority": 6, "category": "金融"
-    },
-    "Guardian World": {
-        "url": "https://www.theguardian.com/world/rss",
-        "priority": 5, "category": "地缘"
-    },
-    "Bloomberg Markets": {
-        "url": "https://feeds.bloomberg.com/markets/news.rss",
-        "priority": 10, "category": "金融"
-    },
-    "Reuters via Google": {
-        "url": "https://news.google.com/rss/search?q=site:reuters.com+(commodities+OR+oil+OR+metals+OR+grain)&hl=en-US&gl=US&ceid=US:en",
-        "priority": 9, "category": "商品综合"
+               "+OR+%E6%9D%8E%E6%B0%8F%E6%8C%87%E6%95%B0+OR+%E7%9E%AA%E6%B2%B3%E8%82%A1%E5%B8%82)"
+               "&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        "priority": 5, "category": "宏观", "tier": 3
     },
 }
+
+# 权威层级权重与配额
+TIER_AUTHORITY = {0: 10.0, 1: 9.0, 2: 6.0, 3: 3.0}
+TIER_LABEL = {0: '官方一手', 1: '通讯社/权威财经', 2: '行业权威', 3: '补充'}
+TIER_MIN_SLOTS = 9   # 每期至少 9 条必须来自 tier 0/1（官方一手+通讯社）
 
 # ============================================================
 # 品种关键词体系 (全品种覆盖)
@@ -639,13 +719,15 @@ def fetch_rss_feeds() -> list:
                     'source': name,
                     'category': cfg.get('category', '综合'),
                     'priority': cfg.get('priority', 5),
+                    'tier': cfg.get('tier', 3),
+                    'authority': TIER_AUTHORITY.get(cfg.get('tier', 3), 3.0),
                     'published': published,
                 })
             return name, out, f"{len(out)}篇"
         except Exception as e:
             return name, out, f"{type(e).__name__}"
 
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    with ThreadPoolExecutor(max_workers=12) as ex:
         futs = {ex.submit(fetch_one, k, v): k for k, v in RSS_SOURCES.items()}
         for f in as_completed(futs):
             name, items, info = f.result()
@@ -728,11 +810,12 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
    - 【市场影响】对哪些品种/资产有影响，方向（利多/利空）
    - 若原文含关键数据（价格、库存、产量、持仓、百分比），用"· "逐条列出
 4. 不要逐句翻译，要提炼。面向专业投资者，语言精炼。
-5. 来源权威性：WSJ、Bloomberg、Reuters、MarketWatch 等一线媒体的报道，忠实采用其表述和数据，不要演绎补充；数据以原文为准。
-6. 如果"正文"部分很短（只有导语/摘要级别），基于已有信息输出 80-150 字精炼短条目，只写确定的信息，禁止编造细节和数据。
+5. 来源权威性：WSJ、Bloomberg、Reuters、FT、Barron's、MarketWatch 等一线媒体的报道，忠实采用其表述和数据，不要演绎补充；数据以原文为准。
+6. 若来源是官方一手发布（Fed / ECB / EIA / USDA / OPEC / IEA / LME / BLS / 财政部OFAC 等），必须严格按公告原文表述，禁止推测和添加原文没有的判断，重点写清"公布值 vs 预期值"以及对相关品种的直接影响方向。
+7. 如果"正文"部分很短（只有导语/摘要级别），基于已有信息输出 80-150 字精炼短条目，只写确定的信息，禁止编造细节和数据。
 
 标题: {title}
-来源: {article.get('source', '')}
+来源: {article.get('source', '')}（层级: {TIER_LABEL.get(article.get('tier', 3), '补充')}）
 
 正文:
 {content}
@@ -809,6 +892,14 @@ def ai_process(article: dict, max_retries: int = 2) -> Optional[dict]:
 # ============================================================
 # 主处理流程
 # ============================================================
+def rank_score(art: dict) -> float:
+    """综合排序分：AI 相关性 50% + 信源权威 30% + 品种命中 20%"""
+    ai = art.get('ai', {}).get('score', 5)
+    auth = art.get('authority', 5.0)
+    kw = min(art.get('kw', {}).get('score', 0), 12.0) / 12.0 * 10.0
+    return ai * 0.5 + auth * 0.3 + kw * 0.2
+
+
 def process(articles: list, state: dict) -> tuple:
     """返回 (最终入选文章, 要闻速览候选池)"""
     now_bj = datetime.now(BEIJING_TZ)
@@ -843,8 +934,8 @@ def process(articles: list, state: dict) -> tuple:
 
     logger.info(f"初筛+去重后: {len(candidates)} 篇 (原始 {len(articles)} 篇)")
 
-    # 按关键词分 + 源优先级排序
-    candidates.sort(key=lambda x: (x['kw']['score'], x['priority']), reverse=True)
+    # 排序：关键词分 + 信源权威（权威源优先进入 AI 处理）
+    candidates.sort(key=lambda x: x['kw']['score'] + x.get('authority', 5.0) * 1.2, reverse=True)
     to_process = candidates[:MAX_PROCESS]
     logger.info(f"进入 AI 处理: {len(to_process)} 篇")
 
@@ -869,7 +960,8 @@ def process(articles: list, state: dict) -> tuple:
                 logger.warning(f"  处理异常: {e}")
 
     # ---- 3. 事件级去重 + 排序 ----
-    results.sort(key=lambda x: (x['ai']['score'], x['kw']['score']), reverse=True)
+    # 同事件优先保留权威源版本（Tier0/1 排在前面）
+    results.sort(key=rank_score, reverse=True)
 
     deduped = []
     kept_events = []          # 本批次内的事件
@@ -892,7 +984,7 @@ def process(articles: list, state: dict) -> tuple:
 
     logger.info(f"事件去重: -{dropped} 条，剩 {len(deduped)} 篇")
 
-    # ---- 4. 品种配额选取 ----
+    # ---- 4. 选取：权威保底 → 品种配额 → 综合补位 ----
     COMMODITY_CATS = ['能源', '贵金属', '有色金属', '黑色金属', '谷物',
                       '油脂油料', '软商品', '农副产品', '化工', '航运']
     PER_CAT_MIN = 2      # 每品种至少争取的条数
@@ -902,7 +994,23 @@ def process(articles: list, state: dict) -> tuple:
     picked_set = set()
     cat_count = {}
 
-    # 第一轮：每个商品品种取 2 条（优先高分）
+    def take(art):
+        picked.append(art)
+        picked_set.add(art['hash'])
+        for c in art['kw']['categories']:
+            cat_count[c] = cat_count.get(c, 0) + 1
+
+    # 4.1 权威保底：Tier0（官方一手）+ Tier1（通讯社/顶级财经）优先占位
+    for art in deduped:
+        if len(picked) >= TIER_MIN_SLOTS:
+            break
+        if art['hash'] in picked_set:
+            continue
+        if art.get('tier', 3) <= 1:
+            take(art)
+    logger.info(f"权威源保底: {len(picked)} 条 (目标 {TIER_MIN_SLOTS})")
+
+    # 4.2 品种配额：每个商品品种取 2 条
     for cat in COMMODITY_CATS:
         for art in deduped:
             if len(picked) >= MAX_ARTICLES:
@@ -910,12 +1018,9 @@ def process(articles: list, state: dict) -> tuple:
             if art['hash'] in picked_set:
                 continue
             if cat in art['kw']['categories'] and cat_count.get(cat, 0) < PER_CAT_MIN:
-                picked.append(art)
-                picked_set.add(art['hash'])
-                for c in art['kw']['categories']:
-                    cat_count[c] = cat_count.get(c, 0) + 1
+                take(art)
 
-    # 第二轮：按分数补齐（单品种不超过 PER_CAT_CAP）
+    # 4.3 综合补位（单品种不超过 PER_CAT_CAP）
     for art in deduped:
         if len(picked) >= MAX_ARTICLES:
             break
@@ -924,19 +1029,21 @@ def process(articles: list, state: dict) -> tuple:
         prim = art['kw']['categories'][0] if art['kw']['categories'] else '其他'
         if cat_count.get(prim, 0) >= PER_CAT_CAP:
             continue
-        picked.append(art)
-        picked_set.add(art['hash'])
-        cat_count[prim] = cat_count.get(prim, 0) + 1
+        take(art)
 
-    picked.sort(key=lambda x: x['ai']['score'], reverse=True)
-    logger.info(f"最终入选: {len(picked)} 篇")
+    picked.sort(key=rank_score, reverse=True)
+    from collections import Counter as _C
+    tc = _C(a.get('tier', 3) for a in picked)
+    logger.info(
+        f"最终入选: {len(picked)} 篇 | 官方一手 {tc[0]} · 通讯社 {tc[1]} · 行业 {tc[2]} · 补充 {tc[3]}"
+    )
 
     # ---- 5. 要闻速览候选池 (宏观/股市/地缘 + 国内源) ----
     digest_pool = [
         a for a in deduped
         if (set(a['kw']['categories']) & DIGEST_CATS) or a['source'] in DIGEST_SOURCES
     ]
-    digest_pool.sort(key=lambda x: x['ai']['score'], reverse=True)
+    digest_pool.sort(key=rank_score, reverse=True)
     digest_pool = digest_pool[:16]
     logger.info(f"要闻速览候选池: {len(digest_pool)} 条")
 
